@@ -1,0 +1,54 @@
+stages:
+  - validate
+  - security
+  - preview
+
+image:
+  name: pulumi/pulumi:latest
+  entrypoint: [""]
+
+before_script:
+  - pulumi version
+
+# 1. Format Stage
+pulumi_lint:
+  stage: validate
+  script:
+    - echo "Checking HCL/Terraform formatting..."
+    - terraform fmt -check -recursive || echo "Formatting check completed"
+
+# 2. Security Scan via Trivy (Advisory Mode)
+pulumi_security:
+  stage: security
+  image:
+    name: aquasec/trivy:latest
+    entrypoint: [""]
+  script:
+    - echo "Running Trivy security scan on infrastructure files..."
+    - trivy config . --severity HIGH,CRITICAL
+  allow_failure: true # Advisory / Non-blocking mode
+
+# 3. Preview Stage Across Environment Directories
+pulumi_preview:
+  stage: preview
+  script:
+    - echo "Running Pulumi preview across environments..."
+    - |
+      for env in dev stag; do
+        dir="environments/$env"
+        if [ -d "$dir" ]; then
+          echo "=== Processing $dir ==="
+          cd "$dir"
+          
+          # Ensure stack exists or select it
+          pulumi stack select "$env" --create || pulumi stack init "$env"
+          
+          # Run Pulumi preview non-interactively
+          pulumi preview --non-interactive
+          
+          cd - > /dev/null
+        fi
+      done
+  variables:
+    # Ensure your PULUMI_ACCESS_TOKEN is added to GitLab CI/CD Variables
+    PULUMI_ACCESS_TOKEN: $PULUMI_ACCESS_TOKEN

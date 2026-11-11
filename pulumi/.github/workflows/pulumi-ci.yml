@@ -1,0 +1,41 @@
+name: Pulumi CI
+
+on:
+  push:
+    branches:
+      - 'infra/**'
+      - 'feature/**'
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  pulumi-preview:
+    name: Validate and Preview
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Pulumi CLI
+        uses: pulumi/actions@v7
+
+      - name: Run Pulumi Preview Across Environments
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+        run: |
+          for env in dev stag; do
+            dir="environments/$env"
+            if [ -d "$dir" ]; then
+              echo "=== Processing $dir ==="
+              cd "$dir"
+              
+              # Ensure stack exists or select it
+              pulumi stack select "$env" --create || pulumi stack init "$env"
+              
+              # Run Pulumi preview non-interactively
+              pulumi preview --non-interactive
+              
+              cd - > /dev/null
+            fi
+          done
