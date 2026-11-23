@@ -1,0 +1,103 @@
+repos:
+  # 1. Universal File Hygiene & Safety Checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: ['--unsafe']
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ['--maxkb=1024']
+        exclude: ^(.*/\.terraform/|\.pre-commit-trivy-cache/)
+      - id: detect-private-key
+
+  # 2. Terraform Formatting, Linting & Validation (terraform/)
+  - repo: local
+    hooks:
+      - id: terraform-fmt
+        name: Format Terraform files (terraform fmt)
+        entry: terraform fmt -recursive
+        language: system
+        files: '^terraform/.*\.(tf|tfvars)$'
+        pass_filenames: false
+      - id: terraform-validate
+        name: Validate Terraform modules & environments (terraform validate)
+        entry: bash -c 'for dir in $(find terraform -name "*.tf" -exec dirname {} \; | sort -u); do (cd "$dir" && terraform init -backend=false -input=false >/dev/null && terraform validate) || exit 1; done'
+        language: system
+        files: '^terraform/.*\.tf$'
+        pass_filenames: false
+      - id: terraform-tflint
+        name: Lint Terraform files (tflint)
+        entry: bash -c 'for dir in $(find terraform -name "*.tf" -exec dirname {} \; | sort -u); do (cd "$dir" && tflint) || exit 1; done'
+        language: system
+        files: '^terraform/.*\.tf$'
+        pass_filenames: false
+
+  # 3. OpenTofu Formatting, Linting & Validation (opentofu/)
+  - repo: local
+    hooks:
+      - id: opentofu-fmt
+        name: Format OpenTofu files (tofu fmt)
+        entry: tofu fmt -recursive
+        language: system
+        files: '^opentofu/.*\.(tf|tfvars)$'
+        pass_filenames: false
+      - id: opentofu-validate
+        name: Validate OpenTofu modules & environments (tofu validate)
+        entry: bash -c 'for dir in $(find opentofu -name "*.tf" -exec dirname {} \; | sort -u); do (cd "$dir" && tofu init -backend=false -input=false >/dev/null && tofu validate) || exit 1; done'
+        language: system
+        files: '^opentofu/.*\.tf$'
+        pass_filenames: false
+      - id: opentofu-tflint
+        name: Lint OpenTofu files (tflint)
+        entry: bash -c 'for dir in $(find opentofu -name "*.tf" -exec dirname {} \; | sort -u); do (cd "$dir" && tflint) || exit 1; done'
+        language: system
+        files: '^opentofu/.*\.tf$'
+        pass_filenames: false
+
+  # 4. Azure Bicep Build & Linter Check (bicep/)
+  - repo: local
+    hooks:
+      - id: bicep-build
+        name: Lint and compile Bicep templates (az bicep build)
+        entry: bash -c 'for f in "$@"; do az bicep build --file "$f" --stdout >/dev/null || exit 1; done' --
+        language: system
+        files: '^bicep/.*\.bicep$'
+
+  # 5. Pulumi Python Linting & YAML Formatting (pulumi/)
+  - repo: local
+    hooks:
+      - id: pulumi-python-ruff-check
+        name: Lint Pulumi Python code (ruff)
+        entry: ruff check --fix
+        language: system
+        files: '^pulumi/.*\.py$'
+      - id: pulumi-python-ruff-format
+        name: Format Pulumi Python code (ruff)
+        entry: ruff format
+        language: system
+        files: '^pulumi/.*\.py$'
+      - id: pulumi-yaml-prettier
+        name: Format Pulumi YAML/JSON files (prettier)
+        entry: prettier --write
+        language: system
+        files: '^pulumi/.*\.(yaml|yml|json)$'
+
+  # 6. Hardcoded Secret Scanner
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+        name: Detect hardcoded secrets with Gitleaks
+
+  # 7. Local Trivy IaC Misconfiguration & Dependency Vulnerability Scanner
+  - repo: local
+    hooks:
+      - id: trivy-iac
+        name: Scan IaC configs and Pulumi dependencies with Trivy
+        entry: trivy fs --scanners vuln,misconfig --offline-scan --ignore-unfixed --skip-version-check --exit-code 1 --severity HIGH,CRITICAL .
+        language: system
+        pass_filenames: false
